@@ -3,6 +3,7 @@ import Webcam from "react-webcam";
 import { Pose } from "@mediapipe/pose";
 import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 import { POSE_CONNECTIONS } from "@mediapipe/pose";
+import VirtualGarment from "./components/VirtualGarment";
 
 function App() {
   const webcamRef = useRef(null);
@@ -12,8 +13,10 @@ function App() {
   const [mirrored, setMirrored] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [poseResults, setPoseResults] = useState(null);
-  const [showDebug, setShowDebug] = useState(true); // Modo debug activado por defecto
+  const [showDebug, setShowDebug] = useState(true);
   const [fps, setFps] = useState(0);
+  const [garmentColor, setGarmentColor] = useState("red");
+  const [garmentType, setGarmentType] = useState("shirt");
   const pose = useRef(null);
 
   // Configurar MediaPipe Pose
@@ -130,6 +133,7 @@ function App() {
     };
   }, [showDebug]);
 
+  // Detectar dispositivos disponibles y solicitar permisos
   useEffect(() => {
     const getDevices = async () => {
       try {
@@ -184,11 +188,12 @@ function App() {
       {selectedDevice && permissionGranted ? (
         <>
           <Webcam
-            key={selectedDevice}
+            key={selectedDevice} // Fuerza reinicio al cambiar cámara
             ref={webcamRef}
             audio={false}
             videoConstraints={{
               deviceId: selectedDevice,
+              // Restricciones más flexibles:
               width: { ideal: 1280 },
               height: { ideal: 720 },
               aspectRatio: 16 / 9,
@@ -210,9 +215,16 @@ function App() {
               position: "absolute",
               width: "100%",
               height: "100%",
-              zIndex: 2,
+              zIndex: 2, // Debajo de la prenda virtual
               display: showDebug ? "block" : "none",
             }}
+          />
+
+          {/* Componente de prenda virtual */}
+          <VirtualGarment
+            poseLandmarks={poseResults?.poseLandmarks}
+            garmentType={garmentType}
+            color={garmentColor}
           />
 
           {/* Selector de cámaras flotante */}
@@ -225,32 +237,79 @@ function App() {
               padding: "10px",
               borderRadius: "5px",
               color: "white",
-              zIndex: 3,
+              zIndex: 4,
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              maxWidth: "300px",
             }}
           >
-            <select
-              value={selectedDevice}
-              onChange={(e) => setSelectedDevice(e.target.value)}
-              style={{ width: "100%" }}
-            >
-              {devices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Cámara ${device.deviceId.slice(0, 5)}`}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label style={{ display: "block", marginBottom: "5px" }}>
+                Seleccionar cámara:
+              </label>
+              <select
+                value={selectedDevice}
+                onChange={(e) => setSelectedDevice(e.target.value)}
+                style={{ width: "100%" }}
+              >
+                {devices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>
+                    {device.label || `Cámara ${device.deviceId.slice(0, 5)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <div style={{ marginTop: "10px", display: "flex", gap: "10px" }}>
-              <button onClick={() => setMirrored(!mirrored)}>
-                {mirrored ? "Desactivar espejo" : "Activar espejo"}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setMirrored(!mirrored)}
+                style={{ flex: 1, padding: "5px" }}
+              >
+                {mirrored ? "✗ Espejo" : "✓ Espejo"}
               </button>
-              <button onClick={() => setShowDebug(!showDebug)}>
-                {showDebug ? "Ocultar debug" : "Mostrar debug"}
+              <button
+                onClick={() => setShowDebug(!showDebug)}
+                style={{ flex: 1, padding: "5px" }}
+              >
+                {showDebug ? "✗ Debug" : "✓ Debug"}
               </button>
             </div>
 
-            <div style={{ marginTop: "10px" }}>
-              FPS: {fps} | Landmarks: {poseResults?.poseLandmarks?.length || 0}
+            <div>
+              <label style={{ display: "block", marginBottom: "5px" }}>
+                Color de prenda:
+              </label>
+              <select
+                value={garmentColor}
+                onChange={(e) => setGarmentColor(e.target.value)}
+                style={{ width: "100%" }}
+              >
+                <option value="red">Rojo</option>
+                <option value="blue">Azul</option>
+                <option value="green">Verde</option>
+                <option value="black">Negro</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px" }}>
+                Tipo de prenda:
+              </label>
+              <select
+                value={garmentType}
+                onChange={(e) => setGarmentType(e.target.value)}
+                style={{ width: "100%" }}
+              >
+                <option value="shirt">Camiseta</option>
+                <option value="jacket">Chaqueta</option>
+                <option value="dress">Vestido</option>
+              </select>
+            </div>
+
+            <div style={{ marginTop: "10px", textAlign: "center" }}>
+              <div>FPS: {fps}</div>
+              <div>Landmarks: {poseResults?.poseLandmarks?.length || 0}</div>
             </div>
           </div>
         </>
@@ -270,6 +329,10 @@ function App() {
               padding: "10px 20px",
               fontSize: "1.2em",
               cursor: "pointer",
+              backgroundColor: "#4CAF50",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
             }}
             onClick={async () => {
               try {
