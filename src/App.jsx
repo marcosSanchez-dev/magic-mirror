@@ -17,6 +17,7 @@ function App() {
   const [fps, setFps] = useState(0);
   const [garmentColor, setGarmentColor] = useState("red");
   const [garmentType, setGarmentType] = useState("shirt");
+  const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
   const pose = useRef(null);
 
   // Configurar MediaPipe Pose
@@ -172,6 +173,20 @@ function App() {
     getDevices();
   }, []);
 
+  // Actualizar tamaño del video cuando cambia
+  useEffect(() => {
+    if (webcamRef.current?.video) {
+      setVideoSize({
+        width: webcamRef.current.video.videoWidth,
+        height: webcamRef.current.video.videoHeight,
+      });
+    }
+  }, [
+    selectedDevice,
+    webcamRef.current?.video?.videoWidth,
+    webcamRef.current?.video?.videoHeight,
+  ]);
+
   return (
     <div
       style={{
@@ -199,6 +214,13 @@ function App() {
               aspectRatio: 16 / 9,
             }}
             mirrored={mirrored}
+            onUserMedia={() => {
+              const video = webcamRef.current.video;
+              setVideoSize({
+                width: video.videoWidth,
+                height: video.videoHeight,
+              });
+            }}
             style={{
               width: "100%",
               height: "100%",
@@ -221,11 +243,15 @@ function App() {
           />
 
           {/* Componente de prenda virtual */}
-          <VirtualGarment
-            poseLandmarks={poseResults?.poseLandmarks}
-            garmentType={garmentType}
-            color={garmentColor}
-          />
+          {videoSize.width > 0 && videoSize.height > 0 && (
+            <VirtualGarment
+              poseLandmarks={poseResults?.poseLandmarks}
+              garmentType={garmentType}
+              color={garmentColor}
+              mirrored={mirrored}
+              videoSize={videoSize}
+            />
+          )}
 
           {/* Selector de cámaras flotante */}
           <div

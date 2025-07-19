@@ -4,6 +4,8 @@ const VirtualGarment = ({
   poseLandmarks,
   garmentType = "shirt",
   color = "red",
+  mirrored = false,
+  videoSize = { width: 0, height: 0 },
 }) => {
   const canvasRef = useRef(null);
 
@@ -16,11 +18,29 @@ const VirtualGarment = ({
   };
 
   useEffect(() => {
-    if (!poseLandmarks || !canvasRef.current) return;
+    if (
+      !poseLandmarks ||
+      !canvasRef.current ||
+      !videoSize.width ||
+      !videoSize.height
+    )
+      return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
+
+    // Establecer tamaño del canvas basado en el video
+    canvas.width = videoSize.width;
+    canvas.height = videoSize.height;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Aplicar transformación de espejo si es necesario
+    if (mirrored) {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.translate(-canvas.width, 0);
+    }
 
     // Obtener landmarks clave
     const leftShoulder = poseLandmarks[11];
@@ -84,7 +104,12 @@ const VirtualGarment = ({
       ctx.closePath();
       ctx.fill();
     }
-  }, [poseLandmarks, garmentType, color]);
+
+    // Restaurar transformación si aplicamos espejo
+    if (mirrored) {
+      ctx.restore();
+    }
+  }, [poseLandmarks, garmentType, color, mirrored, videoSize]);
 
   return (
     <canvas
