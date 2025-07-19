@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const VirtualGarment = ({
   poseLandmarks,
@@ -8,39 +8,61 @@ const VirtualGarment = ({
   videoSize = { width: 0, height: 0 },
 }) => {
   const canvasRef = useRef(null);
+  const [images, setImages] = useState({});
+  const [imagesLoaded, setImagesLoaded] = useState(false);
 
-  // Colores disponibles
-  const colorMap = {
-    red: "rgba(255, 0, 0, 0.6)",
-    blue: "rgba(0, 0, 255, 0.6)",
-    green: "rgba(0, 255, 0, 0.6)",
-    black: "rgba(0, 0, 0, 0.6)",
-  };
+  // Cargar imágenes de prendas
+  useEffect(() => {
+    const loadImages = async () => {
+      //   const types = ["shirt", "jacket", "dress", "hat", "glasses", "scarf"];
+      //   const colors = ["red", "blue", "green", "black"];
+      const types = ["shirt"];
+      const colors = ["red"];
+      const newImages = {};
+
+      const loadPromises = [];
+
+      for (const type of types) {
+        for (const color of colors) {
+          const img = new Image();
+          img.src = `/garments/${type}_${color}.png`;
+          newImages[`${type}_${color}`] = img;
+          loadPromises.push(
+            new Promise((resolve) => {
+              img.onload = resolve;
+              img.onerror = () => {
+                console.error(`Error loading image: ${type}_${color}`);
+                resolve(); // Resuelve incluso si hay error
+              };
+            })
+          );
+        }
+      }
+
+      // Esperar a que todas las imágenes carguen o fallen
+      await Promise.all(loadPromises);
+      setImages(newImages);
+      setImagesLoaded(true);
+    };
+
+    loadImages();
+  }, []);
 
   useEffect(() => {
     if (
       !poseLandmarks ||
       !canvasRef.current ||
       !videoSize.width ||
-      !videoSize.height
+      !videoSize.height ||
+      !imagesLoaded
     )
       return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
-
-    // Establecer tamaño del canvas basado en el video
     canvas.width = videoSize.width;
     canvas.height = videoSize.height;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Aplicar transformación de espejo si es necesario
-    if (mirrored) {
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.translate(-canvas.width, 0);
-    }
 
     // Obtener landmarks clave
     const leftShoulder = poseLandmarks[11];
@@ -65,51 +87,61 @@ const VirtualGarment = ({
     const shoulderWidth = Math.abs(rs.x - ls.x);
     const torsoHeight = Math.abs((lh.y + rh.y) / 2 - (ls.y + rs.y) / 2);
 
-    // Dibujar prenda básica
-    ctx.fillStyle = colorMap[color];
+    // Calcular centro del torso (punto de anclaje)
+    const centerX = (ls.x + rs.x) / 2;
+    const centerY = (ls.y + rs.y) / 2 + torsoHeight * 0.2; // Ajuste vertical
 
-    if (garmentType === "shirt") {
-      // Camiseta básica
-      ctx.beginPath();
-      ctx.moveTo(ls.x, ls.y);
-      ctx.lineTo(rs.x, rs.y);
-      ctx.lineTo(rs.x + shoulderWidth * 0.2, rs.y + torsoHeight * 0.3);
-      ctx.lineTo(rs.x, (ls.y + lh.y) / 2);
-      ctx.lineTo(rs.x, (ls.y + lh.y) / 2 + torsoHeight * 0.8);
-      ctx.lineTo(ls.x, (ls.y + lh.y) / 2 + torsoHeight * 0.8);
-      ctx.lineTo(ls.x, (ls.y + lh.y) / 2);
-      ctx.lineTo(ls.x - shoulderWidth * 0.2, ls.y + torsoHeight * 0.3);
-      ctx.closePath();
-      ctx.fill();
-    } else if (garmentType === "jacket") {
-      // Chaqueta básica
-      ctx.beginPath();
-      ctx.moveTo(ls.x - shoulderWidth * 0.1, ls.y - torsoHeight * 0.1);
-      ctx.lineTo(rs.x + shoulderWidth * 0.1, rs.y - torsoHeight * 0.1);
-      ctx.lineTo(rs.x + shoulderWidth * 0.3, rs.y + torsoHeight * 0.4);
-      ctx.lineTo(rs.x, (ls.y + lh.y) / 2 + torsoHeight * 0.8);
-      ctx.lineTo(ls.x, (ls.y + lh.y) / 2 + torsoHeight * 0.8);
-      ctx.lineTo(ls.x - shoulderWidth * 0.3, ls.y + torsoHeight * 0.4);
-      ctx.closePath();
-      ctx.fill();
-    } else if (garmentType === "dress") {
-      // Vestido básico
-      ctx.beginPath();
-      ctx.moveTo(ls.x, ls.y);
-      ctx.lineTo(rs.x, rs.y);
-      ctx.lineTo(rs.x + shoulderWidth * 0.1, rs.y + torsoHeight * 0.8);
-      ctx.lineTo(rs.x, (ls.y + lh.y) / 2 + torsoHeight * 1.5);
-      ctx.lineTo(ls.x, (ls.y + lh.y) / 2 + torsoHeight * 1.5);
-      ctx.lineTo(ls.x - shoulderWidth * 0.1, ls.y + torsoHeight * 0.8);
-      ctx.closePath();
-      ctx.fill();
-    }
+    // Calcular ángulo de rotación basado en hombros
+    const angle = Math.atan2(rs.y - ls.y, rs.x - ls.x);
 
-    // Restaurar transformación si aplicamos espejo
-    if (mirrored) {
+    // Obtener imagen
+    const imgKey = `${garmentType}_${color}`;
+    const img = images[imgKey];
+
+    if (img && img.complete) {
+      // Tamaño de la imagen (ajustar según landmarks)
+      const width = shoulderWidth * 2.5;
+      const height = (img.naturalHeight / img.naturalWidth) * width;
+
+      ctx.save();
+
+      // Aplicar transformación de espejo si es necesario
+      if (mirrored) {
+        ctx.scale(-1, 1);
+        ctx.translate(-canvas.width, 0);
+      }
+
+      // Aplicar rotación alrededor del centro del torso
+      ctx.translate(centerX, centerY);
+      ctx.rotate(mirrored ? -angle : angle);
+      ctx.translate(-centerX, -centerY);
+
+      // Dibujar imagen
+      ctx.drawImage(
+        img,
+        centerX - width / 2,
+        centerY - height * 0.5, // Centrar verticalmente
+        width,
+        height
+      );
+
       ctx.restore();
+    } else {
+      // Fallback a dibujo básico si no hay imagen
+      ctx.fillStyle = `rgba(255, 0, 0, 0.6)`;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 20, 0, Math.PI * 2);
+      ctx.fill();
     }
-  }, [poseLandmarks, garmentType, color, mirrored, videoSize]);
+  }, [
+    poseLandmarks,
+    garmentType,
+    color,
+    mirrored,
+    videoSize,
+    images,
+    imagesLoaded,
+  ]);
 
   return (
     <canvas

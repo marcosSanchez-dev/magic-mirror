@@ -5,6 +5,78 @@ import { drawConnectors, drawLandmarks } from "@mediapipe/drawing_utils";
 import { POSE_CONNECTIONS } from "@mediapipe/pose";
 import VirtualGarment from "./components/VirtualGarment";
 
+// Hook para detección de gestos (añadido en el mismo archivo)
+const useGestureDetection = (poseLandmarks, callback) => {
+  useEffect(() => {
+    if (!poseLandmarks) return;
+
+    // Landmarks indices (MediaPipe Pose)
+    const LEFT_SHOULDER = 11;
+    const RIGHT_SHOULDER = 12;
+    const LEFT_WRIST = 15;
+    const RIGHT_WRIST = 16;
+    const NOSE = 0;
+    const LEFT_EYE = 2;
+    const RIGHT_EYE = 5;
+
+    // Obtener puntos
+    const leftShoulder = poseLandmarks[LEFT_SHOULDER];
+    const rightShoulder = poseLandmarks[RIGHT_SHOULDER];
+    const leftWrist = poseLandmarks[LEFT_WRIST];
+    const rightWrist = poseLandmarks[RIGHT_WRIST];
+    const nose = poseLandmarks[NOSE];
+    const leftEye = poseLandmarks[LEFT_EYE];
+    const rightEye = poseLandmarks[RIGHT_EYE];
+
+    if (
+      !leftShoulder ||
+      !rightShoulder ||
+      !leftWrist ||
+      !rightWrist ||
+      !nose ||
+      !leftEye ||
+      !rightEye
+    )
+      return;
+
+    // Detectar gestos
+    const gestures = [];
+
+    // 1. Mano derecha levantada: muñeca por encima del hombro
+    if (rightWrist.y < rightShoulder.y) {
+      gestures.push("RIGHT_HAND_UP");
+    }
+
+    // 2. Mano izquierda levantada
+    if (leftWrist.y < leftShoulder.y) {
+      gestures.push("LEFT_HAND_UP");
+    }
+
+    // 3. Cabeza girada a la izquierda: nariz más a la izquierda que el ojo izquierdo
+    const eyeDistance = Math.abs(rightEye.x - leftEye.x);
+    if (nose.x < leftEye.x - eyeDistance * 0.3) {
+      gestures.push("HEAD_LEFT");
+    }
+
+    // 4. Cabeza girada a la derecha: nariz más a la derecha que el ojo derecho
+    if (nose.x > rightEye.x + eyeDistance * 0.3) {
+      gestures.push("HEAD_RIGHT");
+    }
+
+    // 5. Ambos brazos levantados
+    if (
+      gestures.includes("RIGHT_HAND_UP") &&
+      gestures.includes("LEFT_HAND_UP")
+    ) {
+      gestures.push("BOTH_HANDS_UP");
+    }
+
+    if (gestures.length > 0) {
+      callback(gestures);
+    }
+  }, [poseLandmarks, callback]);
+};
+
 function App() {
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
@@ -18,6 +90,9 @@ function App() {
   const [garmentColor, setGarmentColor] = useState("red");
   const [garmentType, setGarmentType] = useState("shirt");
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
+  const [activeGestures, setActiveGestures] = useState([]);
+  const [gestureCooldown, setGestureCooldown] = useState(false);
+  const [gestureFeedback, setGestureFeedback] = useState("");
   const pose = useRef(null);
 
   // Configurar MediaPipe Pose
@@ -187,6 +262,61 @@ function App() {
     webcamRef.current?.video?.videoHeight,
   ]);
 
+  // Configurar detección de gestos
+  useGestureDetection(poseResults?.poseLandmarks, (gestures) => {
+    if (!gestureCooldown) {
+      setActiveGestures(gestures);
+      setGestureCooldown(true);
+
+      // Resetear cooldown después de 1 segundo
+      setTimeout(() => setGestureCooldown(false), 1000);
+    }
+  });
+
+  // Cambiar color basado en gestos
+  useEffect(() => {
+    if (activeGestures.length === 0) return;
+
+    const colors = ["red", "blue", "green", "black"];
+    const currentIndex = colors.indexOf(garmentColor);
+
+    if (activeGestures.includes("RIGHT_HAND_UP")) {
+      const nextIndex = (currentIndex + 1) % colors.length;
+      setGarmentColor(colors[nextIndex]);
+      setGestureFeedback("Color cambiado");
+      setTimeout(() => setGestureFeedback(""), 1000);
+    }
+
+    if (activeGestures.includes("LEFT_HAND_UP")) {
+      const prevIndex = (currentIndex - 1 + colors.length) % colors.length;
+      setGarmentColor(colors[prevIndex]);
+      setGestureFeedback("Color cambiado");
+      setTimeout(() => setGestureFeedback(""), 1000);
+    }
+  }, [activeGestures, garmentColor]);
+
+  // Cambiar tipo de prenda basado en gestos
+  useEffect(() => {
+    if (activeGestures.length === 0) return;
+
+    const types = ["shirt", "jacket", "dress", "hat", "glasses", "scarf"];
+    const currentIndex = types.indexOf(garmentType);
+
+    if (activeGestures.includes("HEAD_RIGHT")) {
+      const nextIndex = (currentIndex + 1) % types.length;
+      setGarmentType(types[nextIndex]);
+      setGestureFeedback("Prenda cambiada");
+      setTimeout(() => setGestureFeedback(""), 1000);
+    }
+
+    if (activeGestures.includes("HEAD_LEFT")) {
+      const prevIndex = (currentIndex - 1 + types.length) % types.length;
+      setGarmentType(types[prevIndex]);
+      setGestureFeedback("Prenda cambiada");
+      setTimeout(() => setGestureFeedback(""), 1000);
+    }
+  }, [activeGestures, garmentType]);
+
   return (
     <div
       style={{
@@ -330,6 +460,9 @@ function App() {
                 <option value="shirt">Camiseta</option>
                 <option value="jacket">Chaqueta</option>
                 <option value="dress">Vestido</option>
+                <option value="hat">Sombrero</option>
+                <option value="glasses">Gafas</option>
+                <option value="scarf">Bufanda</option>
               </select>
             </div>
 
@@ -338,6 +471,75 @@ function App() {
               <div>Landmarks: {poseResults?.poseLandmarks?.length || 0}</div>
             </div>
           </div>
+
+          {/* Panel de gestos detectados */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: "10px",
+              left: "10px",
+              backgroundColor: "rgba(0,0,0,0.7)",
+              padding: "10px",
+              borderRadius: "5px",
+              color: "white",
+              zIndex: 4,
+              maxWidth: "300px",
+            }}
+          >
+            <h4>Gestos detectados:</h4>
+            {activeGestures.length > 0 ? (
+              <ul>
+                {activeGestures.map((gesture, i) => (
+                  <li key={i}>{gesture}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>Ningún gesto detectado</p>
+            )}
+            <p>Instrucciones:</p>
+            <ul>
+              <li>Mano derecha arriba: Siguiente color</li>
+              <li>Mano izquierda arriba: Color anterior</li>
+              <li>Girar cabeza derecha: Siguiente prenda</li>
+              <li>Girar cabeza izquierda: Prenda anterior</li>
+            </ul>
+          </div>
+
+          {/* Feedback visual para gestos */}
+          {gestureFeedback && (
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                backgroundColor: "rgba(0,0,0,0.8)",
+                color: "white",
+                padding: "20px",
+                borderRadius: "10px",
+                fontSize: "24px",
+                zIndex: 5,
+                animation: "fadeOut 1s forwards",
+              }}
+            >
+              {gestureFeedback}
+            </div>
+          )}
+
+          {/* Estilos para la animación de feedback */}
+          <style jsx>{`
+            @keyframes fadeOut {
+              0% {
+                opacity: 1;
+              }
+              70% {
+                opacity: 1;
+              }
+              100% {
+                opacity: 0;
+              }
+            }
+          `}</style>
         </>
       ) : (
         <div style={{ color: "white", textAlign: "center" }}>
