@@ -94,6 +94,8 @@ function App() {
   const [gestureCooldown, setGestureCooldown] = useState(false);
   const [gestureFeedback, setGestureFeedback] = useState("");
   const pose = useRef(null);
+  const lastProcessedGesture = useRef(null);
+  const timeoutRef = useRef(null);
 
   // Configurar MediaPipe Pose
   useEffect(() => {
@@ -265,17 +267,29 @@ function App() {
   // Configurar detección de gestos
   useGestureDetection(poseResults?.poseLandmarks, (gestures) => {
     if (!gestureCooldown) {
-      setActiveGestures(gestures);
-      setGestureCooldown(true);
+      // Filtrar gestos que ya fueron procesados
+      const newGestures = gestures.filter(
+        (gesture) => !lastProcessedGesture.current?.includes(gesture)
+      );
 
-      // Resetear cooldown después de 1 segundo
-      setTimeout(() => setGestureCooldown(false), 1000);
+      if (newGestures.length > 0) {
+        setActiveGestures(gestures);
+        setGestureCooldown(true);
+        lastProcessedGesture.current = gestures;
+
+        // Resetear cooldown después de 1 segundo
+        timeoutRef.current = setTimeout(() => {
+          setGestureCooldown(false);
+          lastProcessedGesture.current = null;
+        }, 1000);
+      }
     }
   });
 
   // Cambiar color basado en gestos
   useEffect(() => {
     if (activeGestures.length === 0) return;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     const colors = ["red", "blue", "green", "black"];
     const currentIndex = colors.indexOf(garmentColor);
@@ -284,20 +298,21 @@ function App() {
       const nextIndex = (currentIndex + 1) % colors.length;
       setGarmentColor(colors[nextIndex]);
       setGestureFeedback("Color cambiado");
-      setTimeout(() => setGestureFeedback(""), 1000);
+      timeoutRef.current = setTimeout(() => setGestureFeedback(""), 1000);
     }
 
     if (activeGestures.includes("LEFT_HAND_UP")) {
       const prevIndex = (currentIndex - 1 + colors.length) % colors.length;
       setGarmentColor(colors[prevIndex]);
       setGestureFeedback("Color cambiado");
-      setTimeout(() => setGestureFeedback(""), 1000);
+      timeoutRef.current = setTimeout(() => setGestureFeedback(""), 1000);
     }
-  }, [activeGestures, garmentColor]);
+  }, [activeGestures]);
 
   // Cambiar tipo de prenda basado en gestos
   useEffect(() => {
     if (activeGestures.length === 0) return;
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     const types = ["shirt", "jacket", "dress", "hat", "glasses", "scarf"];
     const currentIndex = types.indexOf(garmentType);
@@ -306,16 +321,25 @@ function App() {
       const nextIndex = (currentIndex + 1) % types.length;
       setGarmentType(types[nextIndex]);
       setGestureFeedback("Prenda cambiada");
-      setTimeout(() => setGestureFeedback(""), 1000);
+      timeoutRef.current = setTimeout(() => setGestureFeedback(""), 1000);
     }
 
     if (activeGestures.includes("HEAD_LEFT")) {
       const prevIndex = (currentIndex - 1 + types.length) % types.length;
       setGarmentType(types[prevIndex]);
       setGestureFeedback("Prenda cambiada");
-      setTimeout(() => setGestureFeedback(""), 1000);
+      timeoutRef.current = setTimeout(() => setGestureFeedback(""), 1000);
     }
-  }, [activeGestures, garmentType]);
+  }, [activeGestures]);
+
+  // Limpiar timeouts al desmontar
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -338,7 +362,6 @@ function App() {
             audio={false}
             videoConstraints={{
               deviceId: selectedDevice,
-              // Restricciones más flexibles:
               width: { ideal: 1280 },
               height: { ideal: 720 },
               aspectRatio: 16 / 9,
@@ -525,21 +548,6 @@ function App() {
               {gestureFeedback}
             </div>
           )}
-
-          {/* Estilos para la animación de feedback */}
-          <style jsx>{`
-            @keyframes fadeOut {
-              0% {
-                opacity: 1;
-              }
-              70% {
-                opacity: 1;
-              }
-              100% {
-                opacity: 0;
-              }
-            }
-          `}</style>
         </>
       ) : (
         <div style={{ color: "white", textAlign: "center" }}>
@@ -577,6 +585,23 @@ function App() {
           </button>
         </div>
       )}
+
+      {/* Estilos para la animación de feedback */}
+      <style>
+        {`
+          @keyframes fadeOut {
+            0% {
+              opacity: 1;
+            }
+            70% {
+              opacity: 1;
+            }
+            100% {
+              opacity: 0;
+            }
+          }
+        `}
+      </style>
     </div>
   );
 }

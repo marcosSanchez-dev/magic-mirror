@@ -93,6 +93,7 @@ const VirtualGarment = ({
 
     // Calcular ángulo de rotación basado en hombros
     const angle = Math.atan2(rs.y - ls.y, rs.x - ls.x);
+    const rotation = mirrored ? -angle : angle;
 
     // Obtener imagen
     const imgKey = `${garmentType}_${color}`;
@@ -113,14 +114,14 @@ const VirtualGarment = ({
 
       // Aplicar rotación alrededor del centro del torso
       ctx.translate(centerX, centerY);
-      ctx.rotate(mirrored ? -angle : angle);
+      ctx.rotate(rotation);
       ctx.translate(-centerX, -centerY);
 
-      // Dibujar imagen
+      // Dibujar imagen con ajuste vertical
       ctx.drawImage(
         img,
         centerX - width / 2,
-        centerY - height * 0.5, // Centrar verticalmente
+        centerY - height * 0.3, // Ajuste clave para posición vertical
         width,
         height
       );
